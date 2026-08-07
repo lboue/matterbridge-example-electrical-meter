@@ -156,8 +156,7 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
    *   on this endpoint in the spec's topology figure.
    * - EP3 (optional child `electricalMeterUpcoming`): `electricalEnergyTariff` alone — no required
    *   cluster. Tagged AC / Grid / Import / Upcoming. Carries a different flat-rate `CommodityTariff`
-   *   to illustrate the "upcoming" period — for a full day/night HC/HP contract instead of a flat
-   *   rate, see matterbridge-ecodevices (`tariffCluster.ts` / `tariffFactory.ts`).
+   *   to illustrate the "upcoming" period.
    *
    * @returns {Promise<void>} Resolves once the endpoint tree has been registered.
    */
@@ -207,7 +206,7 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
     // CommodityTariff, CommodityPrice (electricalEnergyTariff) and CommodityMetering (electricalMeter)
     // are all optional and have no createDefault...ClusterServer helper, so they're registered
     // directly via behaviors.require() (see flatTariff.ts / commodityExtras.ts). A flat rate is used
-    // here to keep this example minimal — see matterbridge-ecodevices for a full HC/HP contract.
+    // here to keep this example minimal.
     attachFlatTariff(measurement, buildFlatTariff({ label: 'Standard', providerName: 'Matterbridge Example', priceEurPerKwh: CURRENT_PRICE_EUR_PER_KWH }), this.log);
     attachFlatCommodityPrice(measurement, CURRENT_PRICE_EUR_PER_KWH, this.log);
     attachCommodityMetering(measurement, this.cumulativeEnergyWh, this.log);

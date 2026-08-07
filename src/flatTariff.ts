@@ -2,8 +2,9 @@
  * @file src/flatTariff.ts
  * @description Minimal CommodityTariff (0x0700) attachment for the electricalEnergyTariff device
  * type: a single flat-rate tariff component covering the whole day, every day — just enough to
- * show the cluster's shape on EP2/EP3 without the day/night scheduling logic. For a full Heures
- * Creuses / Heures Pleines contract, see matterbridge-ecodevices (tariffCluster.ts / tariffFactory.ts).
+ * show the cluster's shape on EP2/EP3 without the day/night scheduling logic. A real deployment
+ * with a day/night contract (e.g. Heures Creuses / Heures Pleines) would build several DayEntry /
+ * TariffComponent entries instead of the single flat-rate one built here.
  * @author https://github.com/lboue
  * @created 2026-08-07
  * @version 1.0.0
