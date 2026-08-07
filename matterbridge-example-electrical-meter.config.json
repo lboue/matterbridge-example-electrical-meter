@@ -1,0 +1,9 @@
+{
+  "name": "matterbridge-example-electrical-meter",
+  "type": "DynamicPlatform",
+  "whiteList": [],
+  "blackList": [],
+  "debug": false,
+  "unregisterOnShutdown": false,
+  "updateIntervalSeconds": 10
+}
