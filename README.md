@@ -14,13 +14,28 @@
 
 This repository is a generic Matterbridge plugin example — based on [matterbridge-plugin-template](https://github.com/Luligu/matterbridge-plugin-template) — implementing the **"Basic Utility Meter" endpoint topology** from the Matter 1.6 spec (§14.9.6.1, `chip/1.6.0/specs`), built with `MatterbridgeEndpoint.addChildDeviceType()`:
 
-```
-EP1  electricalUtilityMeter + meterReferencePoint      (MeterIdentification, Identify)   tag: ElectricalEnergy
- └─ EP2  electricalMeter + electricalEnergyTariff + electricalSensor                     tags: AC, Grid, Import, Current
- │       (PowerTopology, ElectricalPowerMeasurement, ElectricalEnergyMeasurement — simulated, refreshed on a timer)
- │       (CommodityTariff — flat rate, "Standard"; CommodityPrice; CommodityMetering)
- └─ EP3  electricalEnergyTariff                                                          tags: AC, Grid, Import, Upcoming
-         (CommodityTariff — flat rate, "Standard (upcoming)")
+```mermaid
+flowchart TD
+    subgraph EP1["EP1 · Electrical Meter (bridged device)"]
+        EP1types["electricalUtilityMeter + meterReferencePoint"]
+        EP1clusters["Identify · BridgedDeviceBasicInformation · MeterIdentification"]
+        EP1tag["tag: ElectricalEnergy"]
+    end
+
+    subgraph EP2["EP2 · electricalMeterCurrent"]
+        EP2types["electricalMeter + electricalEnergyTariff + electricalSensor"]
+        EP2clusters["PowerTopology · ElectricalPowerMeasurement · ElectricalEnergyMeasurement<br/>CommodityTariff \"Standard\" · CommodityPrice · CommodityMetering"]
+        EP2tag["tags: AC, Grid, Import, Current"]
+    end
+
+    subgraph EP3["EP3 · electricalMeterUpcoming (optional)"]
+        EP3types["electricalEnergyTariff"]
+        EP3clusters["CommodityTariff \"Standard (upcoming)\""]
+        EP3tag["tags: AC, Grid, Import, Upcoming"]
+    end
+
+    EP1 --> EP2
+    EP1 --> EP3
 ```
 
 - EP1 (parent): `electricalUtilityMeter` (0x0511, requires `MeterIdentification`) + `meterReferencePoint` (0x0512, requires `Identify`).
