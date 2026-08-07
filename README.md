@@ -24,13 +24,13 @@ flowchart TD
 
     subgraph EP2["EP2 · electricalMeterCurrent"]
         EP2types["electricalMeter + electricalEnergyTariff + electricalSensor"]
-        EP2clusters["PowerTopology · ElectricalPowerMeasurement · ElectricalEnergyMeasurement<br/>CommodityTariff \"Standard\" · CommodityPrice · CommodityMetering"]
+        EP2clusters["PowerTopology · ElectricalPowerMeasurement · ElectricalEnergyMeasurement<br/>CommodityTariff (Standard) · CommodityPrice · CommodityMetering"]
         EP2tag["tags: AC, Grid, Import, Current"]
     end
 
     subgraph EP3["EP3 · electricalMeterUpcoming (optional)"]
         EP3types["electricalEnergyTariff"]
-        EP3clusters["CommodityTariff \"Standard (upcoming)\""]
+        EP3clusters["CommodityTariff (Standard, upcoming)"]
         EP3tag["tags: AC, Grid, Import, Upcoming"]
     end
 
