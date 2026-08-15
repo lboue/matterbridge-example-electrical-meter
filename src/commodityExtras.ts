@@ -27,10 +27,9 @@
  */
 
 import { CommodityMeteringServer } from '@matter/main/behaviors/commodity-metering';
-import { CommodityPriceServer } from '@matter/main/behaviors/commodity-price';
-import type { CommodityPrice } from '@matter/main/clusters/commodity-price';
 import { TariffUnit } from '@matter/types/globals';
 import type { MatterbridgeEndpoint } from 'matterbridge';
+import { MatterbridgeCommodityPriceServer } from 'matterbridge/devices';
 import type { AnsiLogger } from 'matterbridge/logger';
 
 import { TARIFF_COMPONENT_ID } from './flatTariff.js';
@@ -40,18 +39,9 @@ const EUR = 978; // ISO 4217 currency code
 const WH_PER_KWH = 1000;
 
 /**
- * `CommodityPriceServer` with the mandatory `GetDetailedPrice` command implemented: it always
- * returns the current price as-is, ignoring the requested `details` bitmap (this flat-rate example
- * never populates the optional Description/Components fields differently per request).
- */
-class FlatCommodityPriceServer extends CommodityPriceServer {
-  override getDetailedPriceRequest(): CommodityPrice.GetDetailedPriceResponse {
-    return { currentPrice: this.state.currentPrice };
-  }
-}
-
-/**
- * Attaches a `CommodityPrice` server mirroring a flat rate to the given endpoint.
+ * Attaches a `CommodityPrice` server mirroring a flat rate to the given endpoint, using the
+ * `MatterbridgeCommodityPriceServer` implementation of the mandatory `GetDetailedPrice` command
+ * (`matterbridge/devices`).
  *
  * @param {MatterbridgeEndpoint} endpoint The endpoint to attach the cluster to (EP2 in this example).
  * @param {number} priceEurPerKwh Flat price, in EUR/kWh — the same rate published by the endpoint's `CommodityTariff`.
@@ -60,7 +50,7 @@ class FlatCommodityPriceServer extends CommodityPriceServer {
  */
 export function attachFlatCommodityPrice(endpoint: MatterbridgeEndpoint, priceEurPerKwh: number, log?: AnsiLogger): void {
   const currency = { currency: EUR, decimalPoints: DECIMAL_POINTS };
-  endpoint.behaviors.require(FlatCommodityPriceServer, {
+  endpoint.behaviors.require(MatterbridgeCommodityPriceServer, {
     tariffUnit: TariffUnit.KWh,
     currency,
     currentPrice: { periodStart: Math.floor(Date.now() / 1000), periodEnd: null, price: Math.round(priceEurPerKwh * 10 ** currency.decimalPoints) },

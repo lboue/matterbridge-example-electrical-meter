@@ -12,13 +12,13 @@
 [![powered by](https://img.shields.io/badge/powered%20by-node--ansi--logger-blue)](https://www.npmjs.com/package/node-ansi-logger)
 [![powered by](https://img.shields.io/badge/powered%20by-node--persist--manager-blue)](https://www.npmjs.com/package/node-persist-manager)
 
-This repository is a generic Matterbridge plugin example — based on [matterbridge-plugin-template](https://github.com/Luligu/matterbridge-plugin-template) — implementing the **"Basic Utility Meter" endpoint topology** from the Matter 1.6 spec (§14.9.6.1, `chip/1.6.0/specs`), built with `MatterbridgeEndpoint.addChildDeviceType()`:
+This repository is a generic Matterbridge plugin example — based on [matterbridge-plugin-template](https://github.com/Luligu/matterbridge-plugin-template) — implementing the **"Basic Utility Meter" endpoint topology** from the Matter 1.6 spec (§14.9.6.1, `chip/1.6.0/specs`). EP1 is built with the `ElectricalUtilityMeter` single-class device (`matterbridge/devices`, dev branch); EP2/EP3 are added with `MatterbridgeEndpoint.addChildDeviceType()`:
 
 ```mermaid
 flowchart TD
     subgraph EP1["EP1 · Electrical Meter (bridged device)"]
-        EP1types["electricalUtilityMeter + meterReferencePoint"]
-        EP1clusters["Identify · BridgedDeviceBasicInformation · MeterIdentification"]
+        EP1types["electricalUtilityMeter + meterReferencePoint + powerSource"]
+        EP1clusters["Identify · BridgedDeviceBasicInformation · PowerSourceWired · MeterIdentification"]
         EP1tag["tag: ElectricalEnergy"]
     end
 
@@ -38,8 +38,8 @@ flowchart TD
     EP1 --> EP3
 ```
 
-- EP1 (parent): `electricalUtilityMeter` (0x0511, requires `MeterIdentification`) + `meterReferencePoint` (0x0512, requires `Identify`).
-- EP2 (child): `electricalMeter` (0x0514) + `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination this example is named after, holding the simulated power/energy measurement clusters.
+- EP1 (parent): the `ElectricalUtilityMeter` single-class device — `electricalUtilityMeter` (0x0511, requires `MeterIdentification`) + `meterReferencePoint` (0x0512, requires `Identify`) + `powerSource` (0x0011, requires `PowerSourceWired`).
+- EP2 (child): `electricalMeter` (0x0514) + `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination this example is named after, holding the simulated power/energy measurement clusters. `ElectricalUtilityMeter`'s own `addElectricalMeter()`/`addElectricalEnergyTariff()` helpers each create a separate child endpoint, so combining all three device types on one endpoint here is still built by hand with `addChildDeviceType()` (see [Luligu/matterbridge#604](https://github.com/Luligu/matterbridge/issues/604) for a feature request to lift that limitation upstream).
 - EP3 (optional child): `electricalEnergyTariff` alone, for the upcoming tariff period.
 
 None of `CommodityTariff`, `CommodityPrice` (both optional on `electricalEnergyTariff`) or `CommodityMetering` (optional on `electricalMeter`) are required clusters, but EP2 carries all three and EP3 carries `CommodityTariff` — matching the clusters shown on these endpoints in the spec's topology figure. Each is a minimal, static flat rate (`src/flatTariff.ts`, `src/commodityExtras.ts`): a single tariff component covering the whole day, every day — just enough to show each cluster's shape without day/night scheduling. `CommodityMetering.meteredQuantity` is refreshed on the same periodic timer as `ElectricalEnergyMeasurement`.
@@ -50,7 +50,7 @@ The plugin registers the whole tree with a single `registerDevice()` call at sta
 
 - **Dev Container support for instant development environment**.
 - Pre-configured TypeScript, TypeScript Native (tsgo), Oxlint, Oxfmt and Vitest.
-- The Matter 1.6 "Basic Utility Meter" parent/child endpoint topology (EP1/EP2/EP3), built with `addChildDeviceType()` and semantic tags (`getSemtag()`).
+- The Matter 1.6 "Basic Utility Meter" parent/child endpoint topology (EP1/EP2/EP3): EP1 via the `ElectricalUtilityMeter` single-class device (`matterbridge/devices`, dev branch), EP2/EP3 via `addChildDeviceType()` and semantic tags (`getSemtag()`).
 - Simulated power/energy readings refreshed on a timer, to illustrate `setAttribute()` usage on a child endpoint's clusters.
 - Minimal flat-rate `CommodityTariff`, `CommodityPrice` and `CommodityMetering` on EP2/EP3, to illustrate each cluster's shape without a full day/night schedule.
 - Configured Vitest test unit that you can expand while you add your own plugin logic.

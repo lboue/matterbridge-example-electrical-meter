@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- EP1 is now built with the `ElectricalUtilityMeter` single-class device (`matterbridge/devices`, Matterbridge
+  dev branch, commit e38b495) instead of a raw `MatterbridgeEndpoint` + manual `MeterIdentificationServer`
+  wiring. This also adds the `powerSource` device type and a `PowerSourceWired` cluster server to EP1.
+- `src/flatTariff.ts` and `src/commodityExtras.ts` now attach the `MatterbridgeCommodityTariffServer` /
+  `MatterbridgeCommodityPriceServer` behaviors exported by `matterbridge/devices` instead of duplicating
+  their `GetTariffComponent`/`GetDayEntry`/`GetDetailedPrice` command implementations locally.
+- Requires a Matterbridge build that includes the `ElectricalUtilityMeter` device (currently only on the
+  `dev` branch/npm tag).
+- EP2 still combines `electricalMeter` + `electricalEnergyTariff` + `electricalSensor` by hand via
+  `addChildDeviceType()`, since `addElectricalMeter()`/`addElectricalEnergyTariff()` each always create a
+  separate child endpoint — see [Luligu/matterbridge#604](https://github.com/Luligu/matterbridge/issues/604).
+
 ## [1.0.0] - 2026-08-07
 
 ### Added

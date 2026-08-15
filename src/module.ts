@@ -24,20 +24,18 @@
  * limitations under the License.
  */
 
-import { MeterIdentificationServer } from '@matter/main/behaviors/meter-identification';
 import { MeterIdentification } from '@matter/main/clusters/meter-identification';
 import {
   type BasePlatformConfig,
   MatterbridgeDynamicPlatform,
-  MatterbridgeEndpoint,
+  type MatterbridgeEndpoint,
   type PlatformMatterbridge,
   electricalEnergyTariff,
   electricalMeter,
   electricalSensor,
-  electricalUtilityMeter,
   getSemtag,
-  meterReferencePoint,
 } from 'matterbridge';
+import { ElectricalUtilityMeter } from 'matterbridge/devices';
 import type { AnsiLogger, LogLevel } from 'matterbridge/logger';
 import { CommodityTariffChronologyTag, CommodityTariffCommodityTag, CommodityTariffFlowTag, ElectricalMeasurementTag, PowerSourceTag } from 'matterbridge/matter';
 
@@ -52,7 +50,6 @@ export type ElectricalMeterPlatformConfig = BasePlatformConfig & {
   updateIntervalSeconds?: number;
 };
 
-const ENDPOINT_ID = 'electricalMeter1';
 const SERIAL_NUMBER = 'EM-0000001';
 const DEFAULT_UPDATE_INTERVAL_SECONDS = 10;
 const NOMINAL_VOLTAGE_V = 230;
@@ -142,12 +139,11 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
    * Creates and registers the example electrical meter endpoint tree.
    *
    * Follows the "Basic Utility Meter" topology from the Matter 1.6 spec (§14.9.6.1,
-   * `chip/1.6.0/specs`): a parent endpoint plus two child endpoints, built with
-   * `addChildDeviceType()`:
-   * - EP1 (parent, this method's `meter`): `electricalUtilityMeter` (0x0511) + `meterReferencePoint`
-   *   (0x0512). Requires `MeterIdentification` (no `createDefault...ClusterServer` helper on
-   *   `MatterbridgeEndpoint`, so it is registered directly via `behaviors.require()`) and `Identify`.
-   *   Tagged `ElectricalEnergy`.
+   * `chip/1.6.0/specs`): a parent endpoint plus two child endpoints.
+   * - EP1 (parent, this method's `meter`): the `ElectricalUtilityMeter` single-class device
+   *   (`matterbridge/devices`) — `electricalUtilityMeter` (0x0511) + `meterReferencePoint` (0x0512) +
+   *   `powerSource` (0x0011), with `Identify`, `BasicInformation`/`BridgedDeviceBasicInformation`,
+   *   `PowerSourceWired` and `MeterIdentification` already wired up. Tagged `ElectricalEnergy`.
    * - EP2 (child `electricalMeterCurrent`, this method's `measurement`): `electricalMeter` (0x0514) +
    *   `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination the periodic
    *   timer updates. Requires `PowerTopology`, `ElectricalPowerMeasurement`, `ElectricalEnergyMeasurement`.
@@ -164,27 +160,11 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
     this.log.info('Creating the example electrical meter...');
 
     // EP1: the utility meter's own identity / reference point for the whole tree.
-    const meter = new MatterbridgeEndpoint([electricalUtilityMeter, meterReferencePoint], {
-      id: ENDPOINT_ID,
-      tagList: [getSemtag(CommodityTariffCommodityTag.ElectricalEnergy)],
-    })
-      .createDefaultIdentifyClusterServer()
-      .createDefaultBridgedDeviceBasicInformationClusterServer(
-        'Electrical Meter',
-        SERIAL_NUMBER,
-        this.matterbridge.aggregatorVendorId,
-        'Matterbridge',
-        'Matterbridge Electrical Meter',
-        10000,
-        '1.0.0',
-      )
-      .addRequiredClusters();
-
-    meter.behaviors.require(MeterIdentificationServer, {
+    const meter = new ElectricalUtilityMeter('Electrical Meter', SERIAL_NUMBER, {
       meterType: MeterIdentification.MeterType.Utility,
       pointOfDelivery: SERIAL_NUMBER,
       meterSerialNumber: SERIAL_NUMBER,
-      protocolVersion: null,
+      tagList: [getSemtag(CommodityTariffCommodityTag.ElectricalEnergy)],
     });
 
     // EP2: the grid import tariff endpoint, combining the three device types this example
