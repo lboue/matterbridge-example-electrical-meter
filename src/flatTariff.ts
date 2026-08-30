@@ -125,12 +125,30 @@ export function buildFlatTariff(config: FlatTariffConfig): CommodityTariff.Attri
  * id — matter.js's default implementation throws "unimplemented" for both), rather than a plugin-local
  * subclass: resolving this behavior class through `matterbridge/devices` (exported alongside
  * `ElectricalUtilityMeter`) instead of a direct `@matter/main/behaviors/commodity-tariff` import
- * guarantees it is the exact same class `ElectricalUtilityMeter.addElectricalMeter()`/
- * `addElectricalEnergyTariff()` already required on `endpoint` — `behaviors.require()` rejects a
- * second, incompatible implementation of the same cluster — even when `matterbridge` is consumed via
- * `npm link`.
+ * guarantees it is the exact same class `MatterbridgeEndpoint` itself expects for `behaviors.require()`,
+ * even when `matterbridge` is consumed via `npm link`.
  *
- * @param {MatterbridgeEndpoint} endpoint The `electricalEnergyTariff` endpoint to attach the cluster to.
+ * This must be the *only* `behaviors.require()` call for `CommodityTariff` on `endpoint`, made before the
+ * endpoint is installed (i.e. before `registerDevice()`): matter.js's `Behaviors.require()` only applies
+ * the options it's given the first time a behavior is added — a second call for an already-present
+ * implementation is a silent no-op. Overriding the schedule afterward via `setAttribute()` doesn't work
+ * either: writing `dayEntries` hits a matter.js model bug where `DayEntryStruct.randomizationType` is
+ * `[RNDM]`-gated (this cluster only enables `Pricing`) yet declares `default: 0`, so the attribute server
+ * auto-fills it and then rejects that same fill for failing conformance — see
+ * {@link https://github.com/matter-js/matter.js/issues/4374} (upstream matter.js bug, with a proposed fix
+ * that removes the conflicting default) and
+ * {@link https://github.com/Luligu/matterbridge/issues/625} (why `ElectricalUtilityMeter.addElectricalMeter()`'s
+ * `energyTariff` option can't be combined with the full day-schedule set up here).
+ *
+ * Once matter.js#4374 ships in the matterbridge dependency this plugin builds against, the `dayEntries`
+ * write stops crashing — but `behaviors.require()`'s silent no-op on an already-present behavior is
+ * separate, intentional matter.js behavior, not something that fix touches. So the manual
+ * `addChildDeviceType()` + single `behaviors.require()` construction here would still be needed for EP2;
+ * the fix would only reopen the option of using `addElectricalMeter()`'s `energyTariff` for EP2 and then
+ * overriding the full schedule via `setAttribute()` *after* `registerDevice()` (never via a second
+ * `behaviors.require()` call, which stays a no-op regardless).
+ *
+ * @param {MatterbridgeEndpoint} endpoint The `electricalEnergyTariff` endpoint to attach the cluster to, not yet registered.
  * @param {CommodityTariff.Attributes} attrs The attributes built by {@link buildFlatTariff}.
  * @param {AnsiLogger} [log] Optional logger for the debug trace.
  * @returns {void}

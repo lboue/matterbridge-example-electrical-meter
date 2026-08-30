@@ -25,9 +25,19 @@
  */
 
 import { MeterIdentification } from '@matter/main/clusters/meter-identification';
+import { ElectricalGridConditionsServer } from '@matter/node/behaviors/electrical-grid-conditions';
 import { TariffUnit } from '@matter/types/globals';
-import { type BasePlatformConfig, MatterbridgeDynamicPlatform, type MatterbridgeEndpoint, type PlatformMatterbridge, getSemtag } from 'matterbridge';
-import { ElectricalUtilityMeter } from 'matterbridge/devices';
+import {
+  type BasePlatformConfig,
+  MatterbridgeDynamicPlatform,
+  type MatterbridgeEndpoint,
+  type PlatformMatterbridge,
+  electricalEnergyTariff,
+  electricalMeter,
+  electricalSensor,
+  getSemtag,
+} from 'matterbridge';
+import { ElectricalUtilityMeter, MatterbridgeCommodityMeteringServer, MatterbridgeCommodityPriceServer } from 'matterbridge/devices';
 import type { AnsiLogger, LogLevel } from 'matterbridge/logger';
 import { CommodityTariffChronologyTag, CommodityTariffCommodityTag, CommodityTariffFlowTag, ElectricalMeasurementTag, PowerSourceTag } from 'matterbridge/matter';
 
@@ -137,23 +147,30 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
    * Creates and registers the example electrical meter endpoint tree.
    *
    * Follows the "Basic Utility Meter" topology from the Matter 1.6 spec (§14.9.6.1,
-   * `chip/1.6.0/specs`): a parent endpoint plus two child endpoints, built with the `ElectricalUtilityMeter`
-   * single-class device (`matterbridge/devices`) and its `addElectricalMeter()`/`addElectricalEnergyTariff()`
-   * composition helpers:
-   * - EP1 (parent, this method's `meter`): `electricalUtilityMeter` (0x0511) + `meterReferencePoint`
+   * `chip/1.6.0/specs`): a parent endpoint plus two child endpoints.
+   * - EP1 (parent, this method's `meter`): built with the `ElectricalUtilityMeter` single-class
+   *   device (`matterbridge/devices`) — `electricalUtilityMeter` (0x0511) + `meterReferencePoint`
    *   (0x0512) + `powerSource`. Requires `MeterIdentification` and `Identify`, both created by the
-   *   `ElectricalUtilityMeter` constructor. Tagged `ElectricalEnergy`.
-   * - EP2 (child `electricalMeterCurrent`, this method's `measurement`), via `addElectricalMeter()`:
-   *   `electricalMeter` (0x0514) + `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) —
-   *   the combination the periodic timer updates. Requires `PowerTopology`, `ElectricalPowerMeasurement`,
-   *   `ElectricalEnergyMeasurement`. Tagged AC / Grid / Import / Current. The `energyTariff` option
-   *   exposes `CommodityPrice`/`CommodityTariff`/`ElectricalGridConditions` directly on this same
-   *   endpoint; `CommodityTariff` is then overridden with the full flat-rate schedule built by
-   *   `flatTariff.ts`, which goes beyond what the `energyTariff` option covers (`TariffInfo`/`TariffUnit`
-   *   only). `CommodityMetering` is set via the `meteredQuantity*`/`tariffUnit` options.
-   * - EP3 (optional child `electricalMeterUpcoming`), via `addElectricalEnergyTariff()`:
-   *   `electricalEnergyTariff` alone. Tagged AC / Grid / Import / Upcoming. Carries a different
-   *   flat-rate `CommodityTariff` to illustrate the "upcoming" period.
+   *   class constructor. Tagged `ElectricalEnergy`.
+   * - EP2 (child `electricalMeterCurrent`, this method's `measurement`): `electricalMeter` (0x0514) +
+   *   `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination the periodic
+   *   timer updates, and the "Electrical Energy Tariff on the same meter endpoint" this example
+   *   demonstrates. Requires `PowerTopology`, `ElectricalPowerMeasurement`, `ElectricalEnergyMeasurement`.
+   *   Tagged AC / Grid / Import / Current.
+   * - EP3 (optional child `electricalMeterUpcoming`): `electricalEnergyTariff` alone. Tagged
+   *   AC / Grid / Import / Upcoming. Carries a different flat-rate `CommodityTariff` to illustrate the
+   *   "upcoming" period.
+   *
+   * EP2/EP3 are built with `addChildDeviceType()` rather than `ElectricalUtilityMeter.addElectricalMeter()`/
+   * `addElectricalEnergyTariff()`: those helpers' `energyTariff` option only covers `TariffInfo`/
+   * `TariffUnit`, and `CommodityTariff`'s full day/tariff-component schedule (see `flatTariff.ts`) can't be
+   * layered on top afterward — matter.js's `behaviors.require()` silently ignores a second call for an
+   * already-present behavior, and writing `dayEntries` via `setAttribute()` post-registration instead hits
+   * a matter.js model bug: `DayEntryStruct.randomizationType` is `[RNDM]`-gated (our cluster only enables
+   * `Pricing`) yet declares `default: 0`, so the attribute-server auto-fills it and then rejects that same
+   * fill for failing conformance. A single `behaviors.require()` call with the full data up front — before
+   * the endpoint is installed — sidesteps both issues, matching how `matterbridge-ecodevices` builds the
+   * same cluster.
    *
    * @returns {Promise<void>} Resolves once the endpoint tree has been registered.
    */
@@ -169,50 +186,51 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
       tagList: [getSemtag(CommodityTariffCommodityTag.ElectricalEnergy)],
     });
 
-    // EP2: the grid import tariff endpoint, combining the three device types this example demonstrates
-    // and holding the simulated power/energy measurement clusters. `energyTariff` exposes the Electrical
-    // Energy Tariff clusters directly on this same meter endpoint.
-    const measurement = meter.addElectricalMeter('Electrical Meter Current', {
-      id: 'electricalMeterCurrent',
-      voltage: voltsToMilli(NOMINAL_VOLTAGE_V),
-      current: ampsToMilli(NOMINAL_POWER_W / NOMINAL_VOLTAGE_V),
-      power: wattsToMilli(NOMINAL_POWER_W),
-      energyImported: wattHoursToMilli(this.cumulativeEnergyWh),
+    // EP2: the grid import tariff endpoint, combining the three device types this example
+    // demonstrates and holding the simulated power/energy measurement clusters.
+    const measurement = meter
+      .addChildDeviceType('electricalMeterCurrent', [electricalMeter, electricalEnergyTariff, electricalSensor], {
+        tagList: [...GRID_IMPORT_AC_TAGS, getSemtag(CommodityTariffChronologyTag.Current)],
+      })
+      .createDefaultPowerTopologyClusterServer()
+      .createDefaultElectricalPowerMeasurementClusterServer(
+        voltsToMilli(NOMINAL_VOLTAGE_V),
+        ampsToMilli(NOMINAL_POWER_W / NOMINAL_VOLTAGE_V),
+        wattsToMilli(NOMINAL_POWER_W),
+        hertzToMilli(NOMINAL_FREQUENCY_HZ),
+      )
+      .createDefaultElectricalEnergyMeasurementClusterServer(wattHoursToMilli(this.cumulativeEnergyWh), null)
+      .addRequiredClusters();
+
+    // CommodityMetering, CommodityPrice and ElectricalGridConditions (all optional on electricalMeter /
+    // electricalEnergyTariff) are what exposes the Electrical Energy Tariff clusters directly on this
+    // same meter endpoint. CommodityTariff carries the full flat-rate schedule built by flatTariff.ts.
+    measurement.behaviors.require(MatterbridgeCommodityMeteringServer, {
       meteredQuantity: [{ tariffComponentIDs: [TARIFF_COMPONENT_ID], quantity: 0 }],
       meteredQuantityTimestamp: Math.floor(Date.now() / 1000),
       tariffUnit: TariffUnit.KWh,
-      tagList: [...GRID_IMPORT_AC_TAGS, getSemtag(CommodityTariffChronologyTag.Current)],
-      energyTariff: {
-        tariffLabel: 'Standard',
-        providerName: 'Matterbridge Example',
-        currency: EUR_CURRENCY,
-        currentPrice: {
-          periodStart: Math.floor(Date.now() / 1000),
-          periodEnd: null,
-          price: Math.round(CURRENT_PRICE_EUR_PER_KWH * 10 ** EUR_CURRENCY.decimalPoints),
-        },
+      maximumMeteredQuantities: null,
+    });
+    measurement.behaviors.require(MatterbridgeCommodityPriceServer, {
+      tariffUnit: TariffUnit.KWh,
+      currency: EUR_CURRENCY,
+      currentPrice: {
+        periodStart: Math.floor(Date.now() / 1000),
+        periodEnd: null,
+        price: Math.round(CURRENT_PRICE_EUR_PER_KWH * 10 ** EUR_CURRENCY.decimalPoints),
+        priceLevel: undefined,
       },
     });
-    // addElectricalMeter()'s own ElectricalPowerMeasurement setup doesn't take a frequency option —
-    // report the nominal grid frequency too.
-    measurement.createDefaultElectricalPowerMeasurementClusterServer(
-      voltsToMilli(NOMINAL_VOLTAGE_V),
-      ampsToMilli(NOMINAL_POWER_W / NOMINAL_VOLTAGE_V),
-      wattsToMilli(NOMINAL_POWER_W),
-      hertzToMilli(NOMINAL_FREQUENCY_HZ),
-    );
-
-    // CommodityTariff is overridden here with the full day/tariff-component schedule: the `energyTariff`
-    // option above only covers TariffInfo/TariffUnit — see flatTariff.ts. A flat rate is used throughout
-    // to keep this example minimal.
+    measurement.behaviors.require(ElectricalGridConditionsServer, { localGenerationAvailable: null, currentConditions: null });
     attachFlatTariff(measurement, buildFlatTariff({ label: 'Standard', providerName: 'Matterbridge Example', priceEurPerKwh: CURRENT_PRICE_EUR_PER_KWH }), this.log);
 
     // EP3 (optional): the upcoming tariff endpoint from the spec topology, with a different flat
     // rate to illustrate the "Upcoming" chronology tag.
-    const upcoming = meter.addElectricalEnergyTariff('Electrical Meter Upcoming', {
-      id: 'electricalMeterUpcoming',
-      tagList: [...GRID_IMPORT_AC_TAGS, getSemtag(CommodityTariffChronologyTag.Upcoming)],
-    });
+    const upcoming = meter
+      .addChildDeviceType('electricalMeterUpcoming', [electricalEnergyTariff], {
+        tagList: [...GRID_IMPORT_AC_TAGS, getSemtag(CommodityTariffChronologyTag.Upcoming)],
+      })
+      .addRequiredClusters();
     attachFlatTariff(upcoming, buildFlatTariff({ label: 'Standard (upcoming)', providerName: 'Matterbridge Example', priceEurPerKwh: UPCOMING_PRICE_EUR_PER_KWH }), this.log);
 
     this.setSelectDevice(SERIAL_NUMBER, 'Electrical Meter');
