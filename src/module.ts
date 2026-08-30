@@ -75,10 +75,13 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
   private measurement?: MatterbridgeEndpoint;
   private updateTimer?: NodeJS.Timeout;
   private cumulativeEnergyWh = 0;
+  /** Typed platform config, captured once instead of casting `this.config` (typed `BasePlatformConfig` by the base class) at each use site. */
+  private readonly pluginConfig: ElectricalMeterPlatformConfig;
 
   constructor(matterbridge: PlatformMatterbridge, log: AnsiLogger, config: ElectricalMeterPlatformConfig) {
     // Always call super(matterbridge, log, config)
     super(matterbridge, log, config);
+    this.pluginConfig = config;
 
     // Verify that Matterbridge is the correct version. The ElectricalUtilityMeter single-class device
     // (matterbridge/devices) and its `energyTariff` option on addElectricalMeter() are new in 3.10.8.
@@ -225,7 +228,7 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
    * @returns {void}
    */
   private startPeriodicUpdates(): void {
-    const intervalSeconds = (this.config as ElectricalMeterPlatformConfig).updateIntervalSeconds ?? DEFAULT_UPDATE_INTERVAL_SECONDS;
+    const intervalSeconds = this.pluginConfig.updateIntervalSeconds ?? DEFAULT_UPDATE_INTERVAL_SECONDS;
     this.updateTimer = setInterval(() => {
       this.updateSimulatedReading().catch((error: unknown) => {
         this.log.error(`Failed to update the simulated reading: ${error instanceof Error ? error.message : String(error)}`);
@@ -242,7 +245,7 @@ export class ElectricalMeterPlatform extends MatterbridgeDynamicPlatform {
   private async updateSimulatedReading(): Promise<void> {
     if (!this.measurement) return;
 
-    const intervalSeconds = (this.config as ElectricalMeterPlatformConfig).updateIntervalSeconds ?? DEFAULT_UPDATE_INTERVAL_SECONDS;
+    const intervalSeconds = this.pluginConfig.updateIntervalSeconds ?? DEFAULT_UPDATE_INTERVAL_SECONDS;
     const powerW = NOMINAL_POWER_W * (0.8 + Math.random() * 0.4);
     const currentA = powerW / NOMINAL_VOLTAGE_V;
     this.cumulativeEnergyWh += (powerW * intervalSeconds) / 3600;
