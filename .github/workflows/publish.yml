@@ -1,4 +1,4 @@
-# Publish to npm (plugin) v. 2.0.5
+# Publish to npm (plugin) v. 2.0.6
 # Path: .github/workflows/publish.yml
 
 name: Publish to npm
@@ -22,7 +22,7 @@ permissions:
 jobs:
   publish-release:
     name: Publish release to npm
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' && github.event.release.prerelease == false
     runs-on: ubuntu-latest
     # env:
     #   PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -143,18 +143,27 @@ jobs:
       #       })
 
   publish-dev:
-    name: Publish daily dev to npm and trigger matterbridge docker build dev
-    if: github.event_name != 'release'
+    name: Publish dev to npm and trigger matterbridge docker build dev
+    if: github.event_name != 'release' || github.event.release.prerelease == true
     runs-on: ubuntu-latest
     env:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
 
     steps:
-      - name: Select branch dev if exists, else default branch
+      - name: Select ref to build
         id: select_ref
         uses: actions/github-script@v8
         with:
           script: |
+            // A GitHub Release marked "pre-release" builds exactly what it was created
+            // against (its target branch/tag), instead of always building `dev`.
+            if (context.eventName === 'release') {
+              const ref = context.payload.release.target_commitish;
+              core.setOutput('ref', ref);
+              core.info(`Pre-release '${context.payload.release.tag_name}': building ref '${ref}'`);
+              return;
+            }
+
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const devBranch = 'dev';
