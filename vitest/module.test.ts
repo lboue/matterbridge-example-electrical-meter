@@ -48,9 +48,9 @@ const mockMatterbridge: PlatformMatterbridge = {
   matterbridgePluginDirectory: path.join('.cache', 'vitest', 'ElectricalMeterPlugin', 'Matterbridge'),
   matterbridgeCertDirectory: path.join('.cache', 'vitest', 'ElectricalMeterPlugin', '.mattercert'),
   globalModulesDirectory: path.join('.cache', 'vitest', 'ElectricalMeterPlugin', 'node_modules'),
-  matterbridgeVersion: '3.10.0',
-  matterbridgeLatestVersion: '3.10.0',
-  matterbridgeDevVersion: '3.10.0',
+  matterbridgeVersion: '3.10.8',
+  matterbridgeLatestVersion: '3.10.8',
+  matterbridgeDevVersion: '3.10.8',
   frontendVersion: '3.0.0',
   bridgeMode: 'bridge',
   restartMode: 'docker',
@@ -103,7 +103,7 @@ describe('Matterbridge Example Electrical Meter', () => {
 
   it('should throw an error if matterbridge is not the required version', () => {
     expect(() => new ElectricalMeterPlatform({ ...mockMatterbridge, matterbridgeVersion: '2.0.0' }, mockLog, mockConfig)).toThrow(
-      'This plugin requires Matterbridge version >= "3.10.0". Please update Matterbridge from 2.0.0 to the latest version in the frontend.',
+      'This plugin requires Matterbridge version >= "3.10.8". Please update Matterbridge from 2.0.0 to the latest version in the frontend.',
     );
   });
 

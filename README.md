@@ -12,25 +12,25 @@
 [![powered by](https://img.shields.io/badge/powered%20by-node--ansi--logger-blue)](https://www.npmjs.com/package/node-ansi-logger)
 [![powered by](https://img.shields.io/badge/powered%20by-node--persist--manager-blue)](https://www.npmjs.com/package/node-persist-manager)
 
-This repository is a generic Matterbridge plugin example — based on [matterbridge-plugin-template](https://github.com/Luligu/matterbridge-plugin-template) — implementing the **"Basic Utility Meter" endpoint topology** from the Matter 1.6 spec (§14.9.6.1, `chip/1.6.0/specs`), built with `MatterbridgeEndpoint.addChildDeviceType()`:
+This repository is a generic Matterbridge plugin example — based on [matterbridge-plugin-template](https://github.com/Luligu/matterbridge-plugin-template) — implementing the **"Basic Utility Meter" endpoint topology** from the Matter 1.6 spec (§14.9.6.1, `chip/1.6.0/specs`), built with the `ElectricalUtilityMeter` single-class device (`matterbridge/devices`) and its `addElectricalMeter()`/`addElectricalEnergyTariff()` composition helpers:
 
 ```mermaid
 flowchart TD
     subgraph EP1["EP1 · Electrical Meter (bridged device)"]
-        EP1types["electricalUtilityMeter + meterReferencePoint"]
-        EP1clusters["Identify · BridgedDeviceBasicInformation · MeterIdentification"]
+        EP1types["electricalUtilityMeter + meterReferencePoint + powerSource"]
+        EP1clusters["Identify · BridgedDeviceBasicInformation · PowerSource · MeterIdentification"]
         EP1tag["tag: ElectricalEnergy"]
     end
 
     subgraph EP2["EP2 · electricalMeterCurrent"]
         EP2types["electricalMeter + electricalEnergyTariff + electricalSensor"]
-        EP2clusters["PowerTopology · ElectricalPowerMeasurement · ElectricalEnergyMeasurement<br/>CommodityTariff (Standard) · CommodityPrice · CommodityMetering"]
+        EP2clusters["PowerTopology · ElectricalPowerMeasurement · ElectricalEnergyMeasurement · CommodityMetering<br/>CommodityTariff (Standard) · CommodityPrice · ElectricalGridConditions"]
         EP2tag["tags: AC, Grid, Import, Current"]
     end
 
     subgraph EP3["EP3 · electricalMeterUpcoming (optional)"]
         EP3types["electricalEnergyTariff"]
-        EP3clusters["CommodityTariff (Standard, upcoming)"]
+        EP3clusters["CommodityTariff (Standard, upcoming) · CommodityPrice · ElectricalGridConditions"]
         EP3tag["tags: AC, Grid, Import, Upcoming"]
     end
 
@@ -38,11 +38,16 @@ flowchart TD
     EP1 --> EP3
 ```
 
-- EP1 (parent): `electricalUtilityMeter` (0x0511, requires `MeterIdentification`) + `meterReferencePoint` (0x0512, requires `Identify`).
-- EP2 (child): `electricalMeter` (0x0514) + `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination this example is named after, holding the simulated power/energy measurement clusters.
-- EP3 (optional child): `electricalEnergyTariff` alone, for the upcoming tariff period.
+- EP1 (parent, `new ElectricalUtilityMeter(name, serial, options)`): `electricalUtilityMeter` (0x0511, requires `MeterIdentification`) + `meterReferencePoint` (0x0512, requires `Identify`) + `powerSource`.
+- EP2 (child, `meter.addElectricalMeter(name, { ..., energyTariff })`): `electricalMeter` (0x0514) + `electricalEnergyTariff` (0x0513) + `electricalSensor` (0x0510) — the combination this example is named after, holding the simulated power/energy measurement clusters. The `energyTariff` option is what exposes the Electrical Energy Tariff clusters directly on this same meter endpoint.
+- EP3 (optional child, `meter.addElectricalEnergyTariff(name, options)`): `electricalEnergyTariff` alone, for the upcoming tariff period.
 
-None of `CommodityTariff`, `CommodityPrice` (both optional on `electricalEnergyTariff`) or `CommodityMetering` (optional on `electricalMeter`) are required clusters, but EP2 carries all three and EP3 carries `CommodityTariff` — matching the clusters shown on these endpoints in the spec's topology figure. Each is a minimal, static flat rate (`src/flatTariff.ts`, `src/commodityExtras.ts`): a single tariff component covering the whole day, every day — just enough to show each cluster's shape without day/night scheduling. `CommodityMetering.meteredQuantity` is refreshed on the same periodic timer as `ElectricalEnergyMeasurement`.
+None of `CommodityTariff`, `CommodityPrice`, `ElectricalGridConditions` (all optional on `electricalEnergyTariff`) or `CommodityMetering` (optional on `electricalMeter`) are required clusters, but `addElectricalMeter()`/`addElectricalEnergyTariff()` create all of them unconditionally (falling back to `null`-valued attributes when the corresponding option is omitted) — matching the clusters shown on these endpoints in the spec's topology figure. `MeterIdentification`, `CommodityPrice`, `CommodityMetering` and `ElectricalGridConditions` are all set up by these helpers — no custom cluster server class needed for any of them. `CommodityTariff` is overridden right after, through `src/flatTariff.ts`, since the day/tariff-component data it publishes (a single flat-rate component covering the whole day, every day — just enough to show the cluster's shape without day/night scheduling) goes beyond what the `energyTariff`/`addElectricalEnergyTariff()` options cover (`TariffInfo`/`TariffUnit` only); it attaches the cluster through `matterbridge`'s own exported `MatterbridgeCommodityTariffServer` (`matterbridge/devices`, alongside `ElectricalUtilityMeter`) rather than a plugin-local subclass, so the `GetTariffComponent`/`GetDayEntry` commands are still implemented without any plugin code. `CommodityMetering.meteredQuantity` is refreshed on the same periodic timer as `ElectricalEnergyMeasurement`.
+
+> [!NOTE]
+> The `ElectricalUtilityMeter` device class (`matterbridge/devices`) is new in `matterbridge` 3.10.7, and the `energyTariff` option on `addElectricalMeter()` — used here to expose the Electrical Energy Tariff clusters on the same meter endpoint — is new in 3.10.8. This plugin requires at least that version (see the `verifyMatterbridgeVersion()` check in `module.ts`).
+>
+> The plugin still imports a few enums/types directly (`MeterIdentification.MeterType`, `CommodityTariff.Feature`/`BlockMode`, `TariffUnit`, `TariffPriceType` — matterbridge doesn't re-export these under its own package yet), and `matterbridge`'s own `PluginManager` refuses to load a plugin that lists **any** `@matter/*` package under **any** `package.json` dependency field. `scripts/ci-link-matter.mjs`, run as a CI-only step right after `npm link matterbridge`, symlinks the plugin's own `node_modules/@matter` to the linked matterbridge's copy without touching `package.json`. Locally, nested inside the `matterbridge` monorepo checkout, Node's own ancestor-directory resolution finds a usable `@matter` copy without any help, so the script is a no-op there.
 
 The plugin registers the whole tree with a single `registerDevice()` call at startup and refreshes EP2's simulated power/energy readings on a configurable interval (`updateIntervalSeconds`, default 10s) — there is no real hardware involved, it's purely illustrative.
 
@@ -50,9 +55,9 @@ The plugin registers the whole tree with a single `registerDevice()` call at sta
 
 - **Dev Container support for instant development environment**.
 - Pre-configured TypeScript, TypeScript Native (tsgo), Oxlint, Oxfmt and Vitest.
-- The Matter 1.6 "Basic Utility Meter" parent/child endpoint topology (EP1/EP2/EP3), built with `addChildDeviceType()` and semantic tags (`getSemtag()`).
+- The Matter 1.6 "Basic Utility Meter" parent/child endpoint topology (EP1/EP2/EP3), built with the `ElectricalUtilityMeter` single-class device, its `addElectricalMeter()`/`addElectricalEnergyTariff()` helpers, and semantic tags (`getSemtag()`).
 - Simulated power/energy readings refreshed on a timer, to illustrate `setAttribute()` usage on a child endpoint's clusters.
-- Minimal flat-rate `CommodityTariff`, `CommodityPrice` and `CommodityMetering` on EP2/EP3, to illustrate each cluster's shape without a full day/night schedule.
+- Minimal flat-rate `CommodityTariff`, `CommodityPrice`, `CommodityMetering` and `ElectricalGridConditions` on EP2/EP3, to illustrate each cluster's shape without a full day/night schedule.
 - Configured Vitest test unit that you can expand while you add your own plugin logic.
 
 ## Available workflows

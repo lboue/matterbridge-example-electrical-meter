@@ -82,6 +82,7 @@
     "disable": "matterbridge --disable .",
     "link": "npm link --no-fund --no-audit matterbridge",
     "unlink": "npm unlink matterbridge",
+    "linkMatter": "node scripts/ci-link-matter.mjs",
     "build": "tsc --project tsconfig.build.json",
     "buildProduction": "tsc --project tsconfig.build.production.json",
     "clean": "node scripts/clean.mjs",

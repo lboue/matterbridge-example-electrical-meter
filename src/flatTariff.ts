@@ -25,11 +25,10 @@
  * limitations under the License.
  */
 
-import { CommodityTariffServer } from '@matter/main/behaviors/commodity-tariff';
 import { CommodityTariff } from '@matter/main/clusters/commodity-tariff';
-import { StatusResponse } from '@matter/types';
 import { TariffPriceType, TariffUnit } from '@matter/types/globals';
 import type { MatterbridgeEndpoint } from 'matterbridge';
+import { MatterbridgeCommodityTariffServer } from 'matterbridge/devices';
 import type { AnsiLogger } from 'matterbridge/logger';
 
 const ALL_DAYS_OF_WEEK: CommodityTariff.DayPatternDayOfWeek = {
@@ -62,27 +61,6 @@ export interface FlatTariffConfig {
   priceEurPerKwh: number;
   /** Tariff start date, epoch seconds. Defaults to now. */
   startDate?: number;
-}
-
-/**
- * `CommodityTariffServer` with the mandatory `GetTariffComponent`/`GetDayEntry` commands
- * implemented against the single day entry and tariff component this flat-rate example publishes
- * — matter.js's default behavior otherwise throws "unimplemented" for both, which logs a warning
- * on every cluster registration.
- */
-class FlatCommodityTariffServer extends CommodityTariffServer.with(CommodityTariff.Feature.Pricing) {
-  override getTariffComponent(request: CommodityTariff.GetTariffComponentRequest): CommodityTariff.GetTariffComponentResponse {
-    const tariffComponent = (this.state.tariffComponents ?? []).find((component) => component.tariffComponentId === request.tariffComponentId);
-    if (!tariffComponent) throw new StatusResponse.NotFoundError(`No TariffComponent with id ${request.tariffComponentId}`);
-    const period = (this.state.tariffPeriods ?? [])[0];
-    return { label: period?.label ?? null, dayEntryIDs: period?.dayEntryIDs ?? [], tariffComponent };
-  }
-
-  override getDayEntry(request: CommodityTariff.GetDayEntryRequest): CommodityTariff.GetDayEntryResponse {
-    const dayEntry = (this.state.dayEntries ?? []).find((entry) => entry.dayEntryId === request.dayEntryId);
-    if (!dayEntry) throw new StatusResponse.NotFoundError(`No DayEntry with id ${request.dayEntryId}`);
-    return { dayEntry };
-  }
 }
 
 /**
@@ -142,12 +120,22 @@ export function buildFlatTariff(config: FlatTariffConfig): CommodityTariff.Attri
 /**
  * Attaches a flat-rate `CommodityTariff` server to the given endpoint.
  *
+ * Uses `matterbridge`'s own `MatterbridgeCommodityTariffServer` (which already bakes in the `Pricing`
+ * feature and implements the mandatory `GetTariffComponent`/`GetDayEntry` commands as plain lookups by
+ * id — matter.js's default implementation throws "unimplemented" for both), rather than a plugin-local
+ * subclass: resolving this behavior class through `matterbridge/devices` (exported alongside
+ * `ElectricalUtilityMeter`) instead of a direct `@matter/main/behaviors/commodity-tariff` import
+ * guarantees it is the exact same class `ElectricalUtilityMeter.addElectricalMeter()`/
+ * `addElectricalEnergyTariff()` already required on `endpoint` — `behaviors.require()` rejects a
+ * second, incompatible implementation of the same cluster — even when `matterbridge` is consumed via
+ * `npm link`.
+ *
  * @param {MatterbridgeEndpoint} endpoint The `electricalEnergyTariff` endpoint to attach the cluster to.
  * @param {CommodityTariff.Attributes} attrs The attributes built by {@link buildFlatTariff}.
  * @param {AnsiLogger} [log] Optional logger for the debug trace.
  * @returns {void}
  */
 export function attachFlatTariff(endpoint: MatterbridgeEndpoint, attrs: CommodityTariff.Attributes, log?: AnsiLogger): void {
-  endpoint.behaviors.require(FlatCommodityTariffServer, attrs);
+  endpoint.behaviors.require(MatterbridgeCommodityTariffServer, attrs);
   log?.debug(`CommodityTariff attached on ${endpoint.id}: ${attrs.tariffInfo?.tariffLabel}`);
 }
