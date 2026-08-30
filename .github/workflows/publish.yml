@@ -66,6 +66,9 @@ jobs:
       - name: Link matterbridge in the plugin
         run: npm link matterbridge --no-fund --no-audit
 
+      - name: Link @matter into the plugin (matterbridge forbids @matter/* as a plugin dependency)
+        run: node scripts/ci-link-matter.mjs
+
       - name: Build the plugin
         run: npm run build
 
@@ -209,6 +212,9 @@ jobs:
 
       - name: Link matterbridge in the plugin
         run: npm link matterbridge --no-fund --no-audit
+
+      - name: Link @matter into the plugin (matterbridge forbids @matter/* as a plugin dependency)
+        run: node scripts/ci-link-matter.mjs
 
       - name: Build the plugin
         run: npm run build

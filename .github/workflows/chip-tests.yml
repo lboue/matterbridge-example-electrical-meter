@@ -41,6 +41,9 @@ jobs:
       - name: Link matterbridge in the plugin
         run: npm link matterbridge --no-fund --no-audit
 
+      - name: Link @matter into the plugin (matterbridge forbids @matter/* as a plugin dependency)
+        run: node scripts/ci-link-matter.mjs
+
       - name: Start the chip-test container
         run: node scripts/run-chip-tests.mjs --start
 
